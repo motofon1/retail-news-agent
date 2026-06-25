@@ -8,9 +8,9 @@ from bs4 import BeautifulSoup
 
 # ===== НАСТРОЙКИ (через переменные окружения) =====
 import os
-TELEGRAM_TOKEN = os.environ.get("8629488168:AAG51tinZhC8MuIPIuMvH-xTpBH9Iz2VznE")
-CHANNEL_ID = os.environ.get("-1001841868631")
-DEEPSEEK_API_KEY = os.environ.get("sk-0877d3c29a194f18bc9e90987cbce1c2")
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
+CHANNEL_ID = os.environ.get("CHANNEL_ID")
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
 
 HISTORY_FILE = "sent_news.json"  # файл будет сохраняться в хранилище
 
