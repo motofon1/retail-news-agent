@@ -33,17 +33,16 @@ def get_news():
     all_news = []
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
-    # --- 1. Парсинг retail.ru (как и раньше) ---
+    # --- 1. Парсинг retail.ru (без изменений) ---
     try:
         url = "https://www.retail.ru/news/"
         response = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(response.text, 'html.parser')
-
-        for article in soup.select('article')[:5]:  # Берём 5 свежих
+        for article in soup.select('article')[:5]:
             title_elem = article.find('h2') or article.find('a')
             if title_elem:
                 title = title_elem.text.strip()
-                if title:  # Проверяем, что заголовок не пустой
+                if title:
                     all_news.append({
                         "title": title,
                         "link": "https://www.retail.ru" + title_elem.get('href', ''),
@@ -53,48 +52,42 @@ def get_news():
     except Exception as e:
         print(f"⚠️ Ошибка парсинга retail.ru: {e}")
 
-    # --- 2. Парсинг shoppers.media (НОВЫЙ ИСТОЧНИК) ---
+    # --- 2. Парсинг shoppers.media (исправленный) ---
     try:
         url = "https://shoppers.media/news"
         response = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        # Ищем все блоки с новостями. На сайте они могут быть в <article> или <div class="news-item">
-        # По структуре HTML shoppers.media, новости часто обёрнуты в <a> внутри <div class="item">
-        for item in soup.select('div.item a')[:5]:  # Берём 5 свежих
-            title = item.text.strip()
-            link = item.get('href', '')
-            if title and link:
-                # Преобразуем относительную ссылку в абсолютную
-                if not link.startswith('http'):
-                    link = 'https://shoppers.media' + link
-                all_news.append({
-                    "title": title,
-                    "link": link,
-                    "summary": title,
-                    "source": "shoppers.media"
-                })
-        
-        # Если структура отличается, попробуем альтернативный селектор (на случай, если первый не сработает)
-        if not all_news:  # Если новостей не нашлось, пробуем другой вариант
-            for item in soup.select('article a')[:5]:
-                title = item.text.strip()
-                link = item.get('href', '')
-                if title and link:
+        # Ищем все элементы, которые выглядят как ссылки на новости.
+        # На сайте shoppers.media новости часто находятся внутри <a> с классом, содержащим "news" или "item",
+        # либо внутри <div class="...news-item...">.
+        # Наиболее надёжный способ — найти все ссылки, у которых в атрибуте href есть "/news/" или "news/"
+        for a in soup.find_all('a', href=True):
+            link = a['href']
+            # Проверяем, что ссылка ведёт на страницу новости
+            if '/news/' in link or link.startswith('news/') or 'shoppers.media/news/' in link:
+                title = a.text.strip()
+                # Проверяем, что заголовок не пустой и не слишком короткий (отсеиваем "Читать далее" и т.п.)
+                if title and len(title) > 10 and not title.startswith('Читать'):
+                    # Преобразуем относительную ссылку в абсолютную
                     if not link.startswith('http'):
                         link = 'https://shoppers.media' + link
-                    all_news.append({
-                        "title": title,
-                        "link": link,
-                        "summary": title,
-                        "source": "shoppers.media"
-                    })
+                    # Проверяем, не добавили ли мы уже эту новость (избегаем дублей внутри источника)
+                    if not any(news['title'] == title for news in all_news):
+                        all_news.append({
+                            "title": title,
+                            "link": link,
+                            "summary": title,
+                            "source": "shoppers.media"
+                        })
+                        # Останавливаемся, как только собрали 5 новостей
+                        if len([news for news in all_news if news['source'] == 'shoppers.media']) >= 5:
+                            break
 
     except Exception as e:
         print(f"⚠️ Ошибка парсинга shoppers.media: {e}")
 
-    # --- 3. Возвращаем собранные новости (максимум 10, чтобы не перегружать) ---
-    # Если нужно больше, увеличьте число в all_news[:10]
+    # --- 3. Возвращаем собранные новости (максимум 10) ---
     return all_news[:10]
 
 def make_post(news_item):
