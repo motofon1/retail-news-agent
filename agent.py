@@ -29,25 +29,73 @@ def save_history(titles):
         json.dump({"titles": titles}, f)
 
 def get_news():
-    """Парсит новости с retail.ru"""
+    """Парсит новости из retail.ru и shoppers.media"""
     all_news = []
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+
+    # --- 1. Парсинг retail.ru (как и раньше) ---
     try:
         url = "https://www.retail.ru/news/"
-        response = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        response = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # Ищем новости (селектор может отличаться)
-        for article in soup.select('article')[:5]:
+
+        for article in soup.select('article')[:5]:  # Берём 5 свежих
             title_elem = article.find('h2') or article.find('a')
             if title_elem:
-                all_news.append({
-                    "title": title_elem.text.strip(),
-                    "link": "https://www.retail.ru" + title_elem.get('href', ''),
-                    "summary": title_elem.text.strip()
-                })
+                title = title_elem.text.strip()
+                if title:  # Проверяем, что заголовок не пустой
+                    all_news.append({
+                        "title": title,
+                        "link": "https://www.retail.ru" + title_elem.get('href', ''),
+                        "summary": title,
+                        "source": "retail.ru"
+                    })
     except Exception as e:
-        print(f"⚠️ Ошибка парсинга: {e}")
-    return all_news
+        print(f"⚠️ Ошибка парсинга retail.ru: {e}")
+
+    # --- 2. Парсинг shoppers.media (НОВЫЙ ИСТОЧНИК) ---
+    try:
+        url = "https://shoppers.media/news"
+        response = requests.get(url, headers=headers, timeout=15)
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        # Ищем все блоки с новостями. На сайте они могут быть в <article> или <div class="news-item">
+        # По структуре HTML shoppers.media, новости часто обёрнуты в <a> внутри <div class="item">
+        for item in soup.select('div.item a')[:5]:  # Берём 5 свежих
+            title = item.text.strip()
+            link = item.get('href', '')
+            if title and link:
+                # Преобразуем относительную ссылку в абсолютную
+                if not link.startswith('http'):
+                    link = 'https://shoppers.media' + link
+                all_news.append({
+                    "title": title,
+                    "link": link,
+                    "summary": title,
+                    "source": "shoppers.media"
+                })
+        
+        # Если структура отличается, попробуем альтернативный селектор (на случай, если первый не сработает)
+        if not all_news:  # Если новостей не нашлось, пробуем другой вариант
+            for item in soup.select('article a')[:5]:
+                title = item.text.strip()
+                link = item.get('href', '')
+                if title and link:
+                    if not link.startswith('http'):
+                        link = 'https://shoppers.media' + link
+                    all_news.append({
+                        "title": title,
+                        "link": link,
+                        "summary": title,
+                        "source": "shoppers.media"
+                    })
+
+    except Exception as e:
+        print(f"⚠️ Ошибка парсинга shoppers.media: {e}")
+
+    # --- 3. Возвращаем собранные новости (максимум 10, чтобы не перегружать) ---
+    # Если нужно больше, увеличьте число в all_news[:10]
+    return all_news[:10]
 
 def make_post(news_item):
     prompt = f"""
