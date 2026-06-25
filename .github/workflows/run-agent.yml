@@ -1,0 +1,38 @@
+name: Запуск ритейл-агента
+
+on:
+  schedule:
+    # Запуск каждые 2 часа с 8 до 22 по московскому времени
+    - cron: '0 5,7,9,11,13,15,17,19 * * *'  # UTC: 5,7,9,...19 = MSK 8,10,12,...22
+  workflow_dispatch:  # Эта кнопка позволяет запустить вручную (для теста)
+
+jobs:
+  run-agent:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Проверка кода
+        uses: actions/checkout@v4
+        
+      - name: Настройка Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          
+      - name: Установка зависимостей
+        run: pip install -r requirements.txt
+        
+      - name: Восстановление истории
+        uses: actions/cache@v3
+        with:
+          path: sent_news.json
+          key: sent_news-${{ github.run_id }}
+          restore-keys: |
+            sent_news-
+            
+      - name: Запуск агента
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: python agent.py
