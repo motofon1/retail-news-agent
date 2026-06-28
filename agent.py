@@ -199,9 +199,9 @@ def main():
     
     # 3. Обрабатываем каждую новость
     for item in news:
-        if item['title'] in sent_titles:
+#        if item['title'] in sent_titles:
             print(f"⏭️ Пропускаем (уже отправлено): {item['title'][:30]}...")
-            continue
+#            continue
         
         print(f"📝 Обработка: {item['title']}")
         post_text = make_post(item)
