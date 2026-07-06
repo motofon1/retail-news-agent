@@ -52,37 +52,46 @@ def get_news():
     except Exception as e:
         print(f"⚠️ Ошибка парсинга retail.ru: {e}")
 
-    # --- 2. Парсинг shoppers.media (исправленный) ---
+   # --- 2. Парсинг shoppers.media (исправленный, без дублей) ---
     try:
         url = "https://shoppers.media/news"
         response = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        # Ищем все элементы, которые выглядят как ссылки на новости.
-        # На сайте shoppers.media новости часто находятся внутри <a> с классом, содержащим "news" или "item",
-        # либо внутри <div class="...news-item...">.
-        # Наиболее надёжный способ — найти все ссылки, у которых в атрибуте href есть "/news/" или "news/"
+        # Используем множество для хранения уникальных ссылок
+        seen_links = set()
+        news_from_shoppers = []
+
+        # Ищем все ссылки, которые ведут на новости
         for a in soup.find_all('a', href=True):
             link = a['href']
             # Проверяем, что ссылка ведёт на страницу новости
             if '/news/' in link or link.startswith('news/') or 'shoppers.media/news/' in link:
+                # Преобразуем относительную ссылку в абсолютную
+                if not link.startswith('http'):
+                    full_link = 'https://shoppers.media' + link
+                else:
+                    full_link = link
+
+                # Проверяем, не обрабатывали ли мы уже эту ссылку
+                if full_link in seen_links:
+                    continue  # Пропускаем дублирующуюся ссылку
+                seen_links.add(full_link)
+
                 title = a.text.strip()
-                # Проверяем, что заголовок не пустой и не слишком короткий (отсеиваем "Читать далее" и т.п.)
+                # Проверяем, что заголовок не пустой и не слишком короткий
                 if title and len(title) > 10 and not title.startswith('Читать'):
-                    # Преобразуем относительную ссылку в абсолютную
-                    if not link.startswith('http'):
-                        link = 'https://shoppers.media' + link
-                    # Проверяем, не добавили ли мы уже эту новость (избегаем дублей внутри источника)
-                    if not any(news['title'] == title for news in all_news):
-                        all_news.append({
-                            "title": title,
-                            "link": link,
-                            "summary": title,
-                            "source": "shoppers.media"
-                        })
-                        # Останавливаемся, как только собрали 5 новостей
-                        if len([news for news in all_news if news['source'] == 'shoppers.media']) >= 5:
-                            break
+                    news_from_shoppers.append({
+                        "title": title,
+                        "link": full_link,
+                        "summary": title,
+                        "source": "shoppers.media"
+                    })
+
+        # Добавляем в общий список, но проверяем глобальные дубли по заголовку
+        for news in news_from_shoppers:
+            if not any(existing['title'] == news['title'] for existing in all_news):
+                all_news.append(news)
 
     except Exception as e:
         print(f"⚠️ Ошибка парсинга shoppers.media: {e}")
