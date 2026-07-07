@@ -193,34 +193,43 @@ def send_to_telegram(text):
         print(f"❌ Ошибка: {e}")
         return False
 
-def main():
-    """Запуск агента (один раз)"""
-    print(f"🚀 Запуск в {datetime.now()}")
-    
-    # 1. Загружаем историю
+# ===== ТЕСТОВЫЙ ЗАПУСК ДЛЯ ПРОВЕРКИ СТИЛЯ =====
+def test_style():
+    """Принудительно обрабатывает первую новость из истории для проверки стиля"""
     history = load_history()
-    sent_titles = history.get("titles", [])
+    if not history or not history.get('titles'):
+        print("❌ Нет сохранённых новостей для теста")
+        return
     
-    # 2. Получаем новости
-    news = get_news()
-    print(f"📰 Найдено новостей: {len(news)}")
+    # Берем первую сохранённую новость
+    test_title = history['titles'][0]
+    print(f"🧪 Тестовый запуск для новости: {test_title}")
     
-    # 3. Обрабатываем каждую новость
-    for item in news:
-        if item['title'] in sent_titles:
-            print(f"⏭️ Пропускаем (уже отправлено): {item['title'][:30]}...")
-            continue
-        
-        print(f"📝 Обработка: {item['title']}")
-        post_text = make_post(item)
-        if post_text:
-            send_to_telegram(post_text)
-            sent_titles.append(item['title'])
-            save_history(sent_titles)
-            time.sleep(2)  # пауза между постами
+    # Создаём фейковую новость для теста
+    test_news = {
+        "title": test_title,
+        "link": "https://test.ru",
+        "summary": "Тестовый текст новости для проверки стиля.",
+        "source": "retail.ru"
+    }
     
-    print("✅ Завершено")
+    # Генерируем пост
+    post = make_post(test_news)
+    if post:
+        print("\n📝 Сгенерированный пост (НОВЫЙ СТИЛЬ):")
+        print("-" * 40)
+        print(post)
+        print("-" * 40)
+        print("\n⚠️ Этот пост НЕ отправлен в Telegram. Это только проверка.")
+    else:
+        print("❌ Не удалось сгенерировать пост")
 
+# ===== ОСНОВНОЙ ЗАПУСК =====
 if __name__ == "__main__":
-    # Тестовый запуск для проверки стиля
-    test_style()
+    # РАСКОММЕНТИРУЙТЕ НУЖНУЮ СТРОКУ:
+    
+    # 1. Для теста стиля (без отправки в Telegram):
+    # test_style()
+    
+    # 2. Для обычной работы (отправка в Telegram):
+    main()
