@@ -227,29 +227,19 @@ def test_style():
 # ===== ОСНОВНОЙ ЗАПУСК =====
 
 def main():
-    """Основная функция агента: парсит новости и отправляет их"""
+    """Основная функция агента: парсит новости и отправляет их (БЕЗ ПРОВЕРКИ ИСТОРИИ)"""
     print(f"🚀 Запуск в {datetime.now()}")
     
-    # 1. Загружаем историю отправленных новостей
-    history = load_history()
-    sent_titles = history.get("titles", [])
-    
-    # 2. Получаем свежие новости
+    # Получаем свежие новости
     news = get_news()
     print(f"📰 Найдено новостей: {len(news)}")
     
-    # 3. Обрабатываем каждую новость
+    # Обрабатываем КАЖДУЮ новость (без проверки дублей)
     for item in news:
-        if item['title'] in sent_titles:
-            print(f"⏭️ Пропускаем (уже отправлено): {item['title'][:40]}...")
-            continue
-        
         print(f"📝 Обработка: {item['title'][:50]}...")
         post_text = make_post(item)
         if post_text and "ПРОПУСТИТЬ" not in post_text:
             send_to_telegram(post_text)
-            sent_titles.append(item['title'])
-            save_history(sent_titles)
             time.sleep(2)  # пауза между постами
     
     print("✅ Завершено")
