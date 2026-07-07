@@ -193,37 +193,6 @@ def send_to_telegram(text):
         print(f"❌ Ошибка: {e}")
         return False
 
-# ===== ТЕСТОВЫЙ ЗАПУСК ДЛЯ ПРОВЕРКИ СТИЛЯ =====
-def test_style():
-    """Принудительно обрабатывает первую новость из истории для проверки стиля"""
-    history = load_history()
-    if not history or not history.get('titles'):
-        print("❌ Нет сохранённых новостей для теста")
-        return
-    
-    # Берем первую сохранённую новость
-    test_title = history['titles'][0]
-    print(f"🧪 Тестовый запуск для новости: {test_title}")
-    
-    # Создаём фейковую новость для теста
-    test_news = {
-        "title": test_title,
-        "link": "https://test.ru",
-        "summary": "Тестовый текст новости для проверки стиля.",
-        "source": "retail.ru"
-    }
-    
-    # Генерируем пост
-    post = make_post(test_news)
-    if post:
-        print("\n📝 Сгенерированный пост (НОВЫЙ СТИЛЬ):")
-        print("-" * 40)
-        print(post)
-        print("-" * 40)
-        print("\n⚠️ Этот пост НЕ отправлен в Telegram. Это только проверка.")
-    else:
-        print("❌ Не удалось сгенерировать пост")
-
 # ===== ОСНОВНОЙ ЗАПУСК =====
 
 def main():
@@ -257,10 +226,4 @@ def main():
     print("✅ Завершено")
 
 if __name__ == "__main__":
-    # РАСКОММЕНТИРУЙТЕ НУЖНУЮ СТРОКУ:
-    
-    # 1. Для теста стиля (без отправки в Telegram):
-    # test_style()
-    
-    # 2. Для обычной работы (отправка в Telegram):
     main()
