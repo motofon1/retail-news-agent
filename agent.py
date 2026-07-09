@@ -33,70 +33,81 @@ def get_news():
     all_news = []
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
-    # --- 1. Парсинг retail.ru (без изменений) ---
+def get_news():
+    """Парсит новости с retail.ru и shoppers.media с полным текстом"""
+    all_news = []
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+
+    # --- 1. Парсинг retail.ru (с описанием) ---
     try:
         url = "https://www.retail.ru/news/"
         response = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(response.text, 'html.parser')
+
         for article in soup.select('article')[:5]:
             title_elem = article.find('h2') or article.find('a')
-            if title_elem:
-                title = title_elem.text.strip()
-                if title:
-                    all_news.append({
-                        "title": title,
-                        "link": "https://www.retail.ru" + title_elem.get('href', ''),
-                        "summary": title,
-                        "source": "retail.ru"
-                    })
+            if not title_elem:
+                continue
+            
+            title = title_elem.text.strip()
+            # Ищем описание: первый абзац или блок с классом announce
+            desc_elem = article.find('p') or article.find('div', class_='announce')
+            if desc_elem:
+                summary = desc_elem.text.strip()
+            else:
+                # Если описания нет, берём заголовок
+                summary = title
+            
+            all_news.append({
+                "title": title,
+                "link": "https://www.retail.ru" + title_elem.get('href', ''),
+                "summary": summary,
+                "source": "retail.ru"
+            })
     except Exception as e:
-        print(f"⚠️ Ошибка парсинга retail.ru: {e}")
+        print(f"⚠️ Ошибка retail.ru: {e}")
 
-   # --- 2. Парсинг shoppers.media (исправленный, без дублей) ---
+    # --- 2. Парсинг shoppers.media (с описанием) ---
     try:
         url = "https://shoppers.media/news"
         response = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        # Используем множество для хранения уникальных ссылок
-        seen_links = set()
-        news_from_shoppers = []
-
-        # Ищем все ссылки, которые ведут на новости
-        for a in soup.find_all('a', href=True):
-            link = a['href']
-            # Проверяем, что ссылка ведёт на страницу новости
-            if '/news/' in link or link.startswith('news/') or 'shoppers.media/news/' in link:
-                # Преобразуем относительную ссылку в абсолютную
-                if not link.startswith('http'):
-                    full_link = 'https://shoppers.media' + link
-                else:
-                    full_link = link
-
-                # Проверяем, не обрабатывали ли мы уже эту ссылку
-                if full_link in seen_links:
-                    continue  # Пропускаем дублирующуюся ссылку
-                seen_links.add(full_link)
-
-                title = a.text.strip()
-                # Проверяем, что заголовок не пустой и не слишком короткий
-                if title and len(title) > 10 and not title.startswith('Читать'):
-                    news_from_shoppers.append({
-                        "title": title,
-                        "link": full_link,
-                        "summary": title,
-                        "source": "shoppers.media"
-                    })
-
-        # Добавляем в общий список, но проверяем глобальные дубли по заголовку
-        for news in news_from_shoppers:
-            if not any(existing['title'] == news['title'] for existing in all_news):
-                all_news.append(news)
-
+        # На shoppers.media новости часто в блоках div.item
+        for item in soup.select('div.item')[:5]:
+            # Ищем заголовок (обычно в <a> внутри блока)
+            title_elem = item.find('a')
+            if not title_elem:
+                continue
+            
+            title = title_elem.text.strip()
+            if not title or len(title) < 10:
+                continue
+            
+            # Ищем описание: следующий абзац или текст после заголовка
+            # На shoppers.media описание может быть в соседнем <p> или в следующем элементе
+            desc_elem = item.find('p') or item.find('div', class_='desc')
+            if desc_elem:
+                summary = desc_elem.text.strip()
+            else:
+                # Если отдельного описания нет, берём заголовок
+                summary = title
+            
+            # Формируем полную ссылку
+            link = title_elem.get('href', '')
+            if link and not link.startswith('http'):
+                link = 'https://shoppers.media' + link
+            
+            all_news.append({
+                "title": title,
+                "link": link,
+                "summary": summary,
+                "source": "shoppers.media"
+            })
     except Exception as e:
-        print(f"⚠️ Ошибка парсинга shoppers.media: {e}")
+        print(f"⚠️ Ошибка shoppers.media: {e}")
 
-    # --- 3. Возвращаем собранные новости (максимум 10) ---
+    # Возвращаем уникальные новости (максимум 10)
     return all_news[:10]
 
 def make_post(news_item):
@@ -137,21 +148,21 @@ def make_post(news_item):
     # ===== КОНЕЦ ПРИМЕРОВ =====
 
     prompt = f"""
-Ты — редактор Telegram-канала о ритейле. Твоя задача — написать содержательный пост по новости.
-
-**ВАЖНО:**
-1. Пост должен быть **ТОЧНО ТАКОЙ ЖЕ ДЛИНЫ**, как примеры ниже (2 абзаца, каждый по 2-3 предложения).
-2. Все цифры, даты, проценты и названия компаний **копируй ДОСЛОВНО** из текста новости.
-3. **НЕЛЬЗЯ** писать пустые фразы вроде "Таковы данные, приведённые в тексте" или "Подробности не раскрываются". Вместо этого напиши, что именно известно.
-4. Первый абзац — суть события и ключевые цифры.
-5. Второй абзац — дополнительный контекст, причина или прогноз (только то, что есть в новости).
+Ты — редактор Telegram-канала о ритейле. Твоя задача — написать пост, **точно копируя все факты** из новости и сохраняя стиль примеров.
 
 **ВОТ МОЙ СТИЛЬ (ОБРАЗЕЦ):**
 {user_examples}
 
-**НОВОСТЬ ДЛЯ ПОСТА:**
-Название: {news_item['title']}
+**НОВОСТЬ ДЛЯ ПОСТА (используй ТОЛЬКО ЭТУ ИНФОРМАЦИЮ):**
+Заголовок: {news_item['title']}
 Текст новости: {news_item['summary']}
+
+**ТВОЙ ПОСТ ДОЛЖЕН:**
+1. Начинаться с заголовка (с эмодзи 📌).
+2. Состоять из 2 абзацев (как в примерах).
+3. **ТОЧНО КОПИРОВАТЬ** все цифры, даты, проценты из текста новости. НЕ меняй их.
+4. **НЕ ДОБАВЛЯТЬ** никаких собственных комментариев, оценок или данных, которых нет в тексте.
+5. Быть сухим и фактологическим, как в примерах.
 
 **ВЫДАЙ ТОЛЬКО ГОТОВЫЙ ПОСТ, БЕЗ ЛИШНИХ СЛОВ.**
 """
@@ -159,12 +170,12 @@ def make_post(news_item):
         response = client.chat.completions.create(
             model="deepseek-chat",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.4,
-            max_tokens=600  # Увеличил, чтобы точно хватило на 2 абзаца
+            temperature=0.3,
+            max_tokens=500
         )
         post = response.choices[0].message.content
         
-        # Добавляем источник в конец
+        # Добавляем источник в конце
         source = news_item.get('source', 'неизвестный источник')
         post += f"\n\nИсточник: {source}"
         return post
