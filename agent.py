@@ -12,7 +12,7 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 CHANNEL_ID = os.environ.get("CHANNEL_ID")
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
 
-HISTORY_FILE = "sent_news.json"  # файл будет сохраняться в хранилище
+HISTORY_FILE = "sent_news.json"
 
 # ===== ИНИЦИАЛИЗАЦИЯ =====
 client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
@@ -28,17 +28,42 @@ def save_history(titles):
     with open(HISTORY_FILE, 'w') as f:
         json.dump({"titles": titles}, f)
 
+# ===== НОВАЯ ФУНКЦИЯ: забирает полный текст со страницы новости =====
+def fetch_full_article(url, source):
+    """Заходит на страницу новости и забирает основной текст"""
+    try:
+        headers = {"User-Agent": "Mozilla/5.0"}
+        response = requests.get(url, headers=headers, timeout=10)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Ищем контейнер с текстом в зависимости от источника
+        if source == "retail.ru":
+            content = soup.find('div', class_='content') or soup.find('article') or soup.find('div', class_='news-text')
+            if content:
+                paragraphs = content.find_all('p')
+                full_text = ' '.join([p.text.strip() for p in paragraphs if p.text.strip()])
+                if full_text:
+                    return full_text
+        elif source == "shoppers.media":
+            content = soup.find('div', class_='text') or soup.find('article') or soup.find('div', class_='article-body')
+            if content:
+                paragraphs = content.find_all('p')
+                full_text = ' '.join([p.text.strip() for p in paragraphs if p.text.strip()])
+                if full_text:
+                    return full_text
+        
+        return None
+    except Exception as e:
+        print(f"⚠️ Ошибка загрузки статьи: {e}")
+        return None
+
+# ===== ОБНОВЛЁННАЯ ФУНКЦИЯ ПАРСИНГА (забирает полный текст) =====
 def get_news():
-    """Парсит новости из retail.ru и shoppers.media"""
+    """Парсит новости с retail.ru и shoppers.media, забирая полный текст"""
     all_news = []
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
-def get_news():
-    """Парсит новости с retail.ru и shoppers.media с полным текстом"""
-    all_news = []
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-
-    # --- 1. Парсинг retail.ru (с описанием) ---
+    # --- 1. Парсинг retail.ru ---
     try:
         url = "https://www.retail.ru/news/"
         response = requests.get(url, headers=headers, timeout=15)
@@ -50,32 +75,28 @@ def get_news():
                 continue
             
             title = title_elem.text.strip()
-            # Ищем описание: первый абзац или блок с классом announce
-            desc_elem = article.find('p') or article.find('div', class_='announce')
-            if desc_elem:
-                summary = desc_elem.text.strip()
-            else:
-                # Если описания нет, берём заголовок
-                summary = title
+            link = "https://www.retail.ru" + title_elem.get('href', '')
+            
+            # Забираем полный текст новости
+            full_text = fetch_full_article(link, "retail.ru")
+            summary = full_text if full_text else title
             
             all_news.append({
                 "title": title,
-                "link": "https://www.retail.ru" + title_elem.get('href', ''),
+                "link": link,
                 "summary": summary,
                 "source": "retail.ru"
             })
     except Exception as e:
         print(f"⚠️ Ошибка retail.ru: {e}")
 
-    # --- 2. Парсинг shoppers.media (с описанием) ---
+    # --- 2. Парсинг shoppers.media ---
     try:
         url = "https://shoppers.media/news"
         response = requests.get(url, headers=headers, timeout=15)
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        # На shoppers.media новости часто в блоках div.item
         for item in soup.select('div.item')[:5]:
-            # Ищем заголовок (обычно в <a> внутри блока)
             title_elem = item.find('a')
             if not title_elem:
                 continue
@@ -84,19 +105,13 @@ def get_news():
             if not title or len(title) < 10:
                 continue
             
-            # Ищем описание: следующий абзац или текст после заголовка
-            # На shoppers.media описание может быть в соседнем <p> или в следующем элементе
-            desc_elem = item.find('p') or item.find('div', class_='desc')
-            if desc_elem:
-                summary = desc_elem.text.strip()
-            else:
-                # Если отдельного описания нет, берём заголовок
-                summary = title
-            
-            # Формируем полную ссылку
             link = title_elem.get('href', '')
             if link and not link.startswith('http'):
                 link = 'https://shoppers.media' + link
+            
+            # Забираем полный текст новости
+            full_text = fetch_full_article(link, "shoppers.media")
+            summary = full_text if full_text else title
             
             all_news.append({
                 "title": title,
@@ -107,13 +122,13 @@ def get_news():
     except Exception as e:
         print(f"⚠️ Ошибка shoppers.media: {e}")
 
-    # Возвращаем уникальные новости (максимум 10)
     return all_news[:10]
 
+# ===== ОБНОВЛЁННАЯ ФУНКЦИЯ ГЕНЕРАЦИИ ПОСТА =====
 def make_post(news_item):
-    """Генерирует пост в стиле пользователя, с точными фактами"""
+    """Генерирует пост, точно копируя стиль из примеров и факты из новости"""
     
-    # ===== ВАШИ ПРИМЕРЫ ПОСТОВ (вставьте свои) =====
+    # ===== ВАШИ ПРИМЕРЫ (вставьте свои посты) =====
     user_examples = """
     **Пример 1:**
     📌 Обязательная маркировка зубных щёток и салфеток стартует с 1 сентября 2026 года
@@ -148,42 +163,41 @@ def make_post(news_item):
     # ===== КОНЕЦ ПРИМЕРОВ =====
 
     prompt = f"""
-Ты — редактор Telegram-канала о ритейле. Твоя задача — написать пост, **точно копируя все факты** из новости и сохраняя стиль примеров.
+Ты — редактор Telegram-канала о ритейле. Твоя задача — написать пост по новости, **точно копируя структуру и стиль из примеров**.
 
 **ВОТ МОЙ СТИЛЬ (ОБРАЗЕЦ):**
 {user_examples}
 
-**НОВОСТЬ ДЛЯ ПОСТА (используй ТОЛЬКО ЭТУ ИНФОРМАЦИЮ):**
+**НОВОСТЬ ДЛЯ ПОСТА (используй ТОЛЬКО ЭТИ ФАКТЫ):**
 Заголовок: {news_item['title']}
-Текст новости: {news_item['summary']}
+Полный текст новости:
+{news_item['summary']}
 
 **ТВОЙ ПОСТ ДОЛЖЕН:**
-1. Начинаться с заголовка (с эмодзи 📌).
-2. Состоять из 2 абзацев (как в примерах).
-3. **ТОЧНО КОПИРОВАТЬ** все цифры, даты, проценты из текста новости. НЕ меняй их.
-4. **НЕ ДОБАВЛЯТЬ** никаких собственных комментариев, оценок или данных, которых нет в тексте.
-5. Быть сухим и фактологическим, как в примерах.
+1. Начинаться с 📌 и заголовка.
+2. Состоять из 2 абзацев, как в примерах.
+3. **ТОЧНО КОПИРОВАТЬ** все цифры, даты, проценты.
+4. **НЕ ДОБАВЛЯТЬ** ничего, чего нет в тексте новости.
+5. Быть таким же по длине и тону, как примеры.
 
-**ВЫДАЙ ТОЛЬКО ГОТОВЫЙ ПОСТ, БЕЗ ЛИШНИХ СЛОВ.**
+**ВЫДАЙ ТОЛЬКО ГОТОВЫЙ ПОСТ.**
 """
     try:
         response = client.chat.completions.create(
             model="deepseek-chat",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
-            max_tokens=500
+            max_tokens=600
         )
         post = response.choices[0].message.content
-        
-        # Добавляем источник в конце
         source = news_item.get('source', 'неизвестный источник')
         post += f"\n\nИсточник: {source}"
         return post
-        
     except Exception as e:
         print(f"❌ Ошибка DeepSeek: {e}")
         return None
-        
+
+# ===== ФУНКЦИЯ ОТПРАВКИ В TELEGRAM =====
 def send_to_telegram(text):
     """Отправляет пост в канал через HTTP"""
     if not text or "ПРОПУСТИТЬ" in text:
@@ -204,8 +218,7 @@ def send_to_telegram(text):
         print(f"❌ Ошибка: {e}")
         return False
 
-# ===== ОСНОВНОЙ ЗАПУСК =====
-
+# ===== ОСНОВНАЯ ФУНКЦИЯ =====
 def main():
     """Основная функция агента: парсит новости и отправляет только новые"""
     print(f"🚀 Запуск в {datetime.now()}")
@@ -236,5 +249,6 @@ def main():
     
     print("✅ Завершено")
 
+# ===== ТОЧКА ВХОДА =====
 if __name__ == "__main__":
     main()
